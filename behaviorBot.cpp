@@ -4,10 +4,17 @@
 #include <iomanip>
 #include <math.h>
 #include <ev3dev.h>
+#include <string.h>
 
 #include <sys/time.h>
 #include <unistd.h>
 #include <system_error>
+
+
+inline int strequ ( const char * str1, const char * str2 )
+{
+    return ! strcmp ( str1, str2 );
+}
 
 unsigned long usNow()
 {
@@ -1219,6 +1226,10 @@ std::cout << "targetRadius=" << targetRadius
 
     void update()
     {
+        // This update function calculates the error as the difference between
+        // (a) the robot's distance from the center of the circle, and (b) the
+        // radius of the circle that the robot should follow. Then it attempts
+        // to reduce the error to zero while moving forward.
         float originDistance = distance( 0, 0, odometer.X(), odometer.Y() );
         float e = originDistance - targetRadius;
         float D = ( e - eOld );
@@ -1776,6 +1787,10 @@ public:
     };
     void update()
     {
+        // This update function calculates the angle of the robot in reference
+        // to the center of the circle. Then it computes the coordinates of a
+        // goal point that is (a) on the circle, and (b) just "forward" of the
+        // robot's angular position by a tiny lead angle ("delta-theta").
         // calculate the dynamic goal point
         float xRobot = odometer.X();
         float yRobot = odometer.Y();
@@ -1785,12 +1800,13 @@ public:
         float targetAngle = robotAngle - leadAngle;
         xGoal = xCenter + radius * cos( targetAngle );
         yGoal = yCenter + radius * sin( targetAngle );
+
         // calculate distance travelled
         distanceTravelled += distance( xOld, yOld, xRobot, yRobot );
         xOld = xRobot;
         yOld = yRobot;
 
-        float d = distance( xCenter, yCenter, xRobot, yRobot );
+        // float d = distance( xCenter, yCenter, xRobot, yRobot );
         // std::cout << std::fixed << std::setprecision(1) 
         //     << " d=" << d
         //     << ", error=" << (d-radius)
@@ -1818,13 +1834,13 @@ protected:
 };
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-// * class BotManager (MVC:CONTROLLER)
-// * brief manages frames and selects behaviors
+// * class BotMission (MVC:CONTROLLER)
+// * brief manages frames and selects behaviors for a mission
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-class BotManager
+class BotMission
 {
 public:
-    BotManager():
+    BotMission():
        diffBot(),
        odometer(diffBot)
     {
@@ -1837,89 +1853,14 @@ public:
         long speedPercent = 25;
         long distanceMils = 13 * 1000;
 
-        std::vector <Behavior*> behaviorSequence;
-        std::vector <Perceiver*> perceiverList;
-
-        // BehaviorDriveStraightDifferentialPID driveForward(
-        //     diffBot,
-        //     odometer,
-        //     speedPercent,
-        //     distanceMils
-        // );
-        // BehaviorPivotTurn pivotLeftForward(
-        //     diffBot,
-        //     odometer,
-        //     diffBot.getLeftMotor(),
-        //     diffBot.getRightMotor()
-        // );
-        // behaviorSequence.push_back( &driveForward );
-        // behaviorSequence.push_back( &pivotLeftForward );
-        // behaviorSequence.push_back( &pivotLeftForward );
-
-        // BehaviorGoToGoal gotoWP1( diffBot, odometer, 91000,     0 );
-        // BehaviorGoToGoal gotoWP2( diffBot, odometer, 91000, -52000 );
-        // BehaviorGoToGoal gotoWP3( diffBot, odometer,     0, -52000 );
-        // BehaviorGoToGoal gotoWP4( diffBot, odometer,     0,     0 );
-
-        // BehaviorGoToGoal gotoWP1( diffBot, odometer, 22000,      0 );
-        // BehaviorGoToGoal gotoWP2( diffBot, odometer, 22000, -26000 );
-        // BehaviorGoToGoal gotoWP3( diffBot, odometer,     0, -26000 );
-        // BehaviorGoToGoal gotoWP4( diffBot, odometer,     0,      0 );
-
-        // behaviorSequence.push_back( &gotoWP1 );
-        // behaviorSequence.push_back( &gotoWP2 );
-        // behaviorSequence.push_back( &gotoWP3 );
-        // behaviorSequence.push_back( &gotoWP4 );
-
-        // BehaviorDriveStraightLineDifferentialPID driveForwardA( diffBot, odometer, 30, 39000 );
-        // behaviorSequence.push_back( &driveForwardA );
-
-        // BehaviorDriveStraightDifferentialPID driveForwardA( diffBot, odometer, 30, 91000 );
-        // BehaviorDriveStraightDifferentialPID driveForwardB( diffBot, odometer, 30, 52000 );
-        // BehaviorSpinTurn  spinRightTurn( diffBot, odometer, diffBot.getRightMotor(), diffBot.getLeftMotor() );
-        // BehaviorPivotTurn pivotRightTurn( diffBot, odometer, diffBot.getRightMotor(), diffBot.getLeftMotor(), 88 );
-
-        // behaviorSequence.push_back( &driveForwardA );
-        // behaviorSequence.push_back( &pivotRightTurn );
-        // behaviorSequence.push_back( &driveForwardB );
-        // behaviorSequence.push_back( &pivotRightTurn );
-        // behaviorSequence.push_back( &driveForwardA );
-        // behaviorSequence.push_back( &pivotRightTurn );
-        // behaviorSequence.push_back( &driveForwardB );
-        // behaviorSequence.push_back( &pivotRightTurn );
-
-        // BehaviorDriveStraightDifferentialPID driveForward65in(
-        //     diffBot,
-        //     odometer,
-        //     20,
-        //     65536
-        // );
-        // behaviorSequence.push_back( &driveForward65in );
-        // BehaviorWaitForBackButton waitForbackButton(diffBot);
-        // behaviorSequence.push_back( &waitForbackButton );
-
-        PointObstaclePerceiver pop( diffBot, 14 * 1000 );
-        perceiverList.push_back( &pop );
-
-        float radius = 39 * 1000; 
-
-        BehaviorGoToGoal gotoWP1( diffBot, odometer, &pop, 0, - radius );
-        behaviorSequence.push_back( &gotoWP1 );
-
-        // BehaviorDriveCircle driveCircle( diffBot, odometer, radius, 50, 0.35 * 2*PI*radius );
-        // behaviorSequence.push_back( &driveCircle );
-
-        BehaviorWideCircle driveCircle( diffBot, odometer, &pop, radius, 0, 0 );
-        behaviorSequence.push_back( &driveCircle );
+        BehaviorSequence behaviorSequence;
+        buildSequence( behaviorSequence );
 
         unsigned long tStart = usNow();
         long frameCount = 0;
 
         float yMax = odometer.Y();
 
-        // for( int b=0; b<behaviorSequence.size(); ++b )
-        // {
-        //     Behavior& behavior = *behaviorSequence[b];
         for( auto b : behaviorSequence )
         {
             Behavior& behavior = *b;
@@ -1949,12 +1890,90 @@ public:
             // std::cout << "   yMax=" << yMax << "   usTotal=" << usTotal << "   frameCount=" << frameCount << "   dtAverage=" << dtAverage << "us" << std::endl;
         }
     };
-private:
+protected:
+    typedef std::vector <Behavior*> BehaviorSequence;
+    virtual void buildSequence( BehaviorSequence& behaviorSequence ) = 0;
     DifferentialBot diffBot;
     Odometer odometer;
 };
 
 
+class RectangleMission : public BotMission
+{
+protected:
+    void buildSequence( BehaviorSequence& behaviorSequence )
+    {
+        long x0 =      0;
+        long y0 =      0;
+        long x1 =  91000; //  22000;
+        long y1 = -52000; // -26000;
+
+        PointObstaclePerceiver pop( diffBot, 14 * 1000 );
+
+        BehaviorGoToGoal gotoWP1( diffBot, odometer, &pop, x1, y0 );
+        BehaviorGoToGoal gotoWP2( diffBot, odometer, &pop, x1, y1 );
+        BehaviorGoToGoal gotoWP3( diffBot, odometer, &pop, x0, y1 );
+        BehaviorGoToGoal gotoWP4( diffBot, odometer, &pop, x0, y0 );
+
+        behaviorSequence.push_back( &gotoWP1 );
+        behaviorSequence.push_back( &gotoWP2 );
+        behaviorSequence.push_back( &gotoWP3 );
+        behaviorSequence.push_back( &gotoWP4 );
+    };
+};
+
+class StraightTurnRectangleMission : public BotMission
+{
+protected:
+    void buildSequence( BehaviorSequence& behaviorSequence )
+    {
+        // BehaviorDriveStraightLineDifferentialPID driveForwardA( diffBot, odometer, 30, 39000 );
+        // behaviorSequence.push_back( &driveForwardA );
+
+        BehaviorDriveStraightDifferentialPID driveForwardA( diffBot, odometer, 30, 91000 );
+        BehaviorDriveStraightDifferentialPID driveForwardB( diffBot, odometer, 30, 52000 );
+        BehaviorSpinTurn  spinRightTurn( diffBot, odometer, diffBot.getRightMotor(), diffBot.getLeftMotor() );
+        BehaviorPivotTurn pivotRightTurn( diffBot, odometer, diffBot.getRightMotor(), diffBot.getLeftMotor(), 88 );
+
+        behaviorSequence.push_back( &driveForwardA );
+        behaviorSequence.push_back( &pivotRightTurn );
+        behaviorSequence.push_back( &driveForwardB );
+        behaviorSequence.push_back( &pivotRightTurn );
+        behaviorSequence.push_back( &driveForwardA );
+        behaviorSequence.push_back( &pivotRightTurn );
+        behaviorSequence.push_back( &driveForwardB );
+        behaviorSequence.push_back( &pivotRightTurn );
+    };
+};
+
+class CircleMission : public BotMission
+{
+protected:
+    void buildSequence( BehaviorSequence& behaviorSequence )
+    {
+        PointObstaclePerceiver pop( diffBot, 14 * 1000 );
+
+        float radius = 39 * 1000; 
+
+        BehaviorGoToGoal gotoWP1( diffBot, odometer, &pop, 0, - radius );
+        behaviorSequence.push_back( &gotoWP1 );
+
+        // BehaviorDriveCircle driveCircle( diffBot, odometer, radius, 50, 0.35 * 2*PI*radius );
+        // behaviorSequence.push_back( &driveCircle );
+
+        BehaviorWideCircle driveCircle( diffBot, odometer, &pop, radius, 0, 0 );
+        behaviorSequence.push_back( &driveCircle );
+
+    };
+};
+
+
+
+// \|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|
+//
+// behavior states, transitions
+//
+// \|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|\|
 
 class BehaviorState;
 
@@ -2339,24 +2358,47 @@ private:
     Odometer odometer;
 };
 
-
-
 int main( int argc, char* argv[] )
 {
-    try {
-        // eopdFilterTest();
+    try
+    {
+        if( argc != 2 )
+        {
+            std::cout << "usage: " << argv[0] << " circle | maze | rectangle | eopd" << std::endl;
+        }
+        else if( strcmp( argv[1], "circle" ) == 0 )
+        {
+            // DifferentialBot diffBot;
+            // Odometer odometer(diffBot);
+            // BehaviorCircleTurn turnRight( diffBot, odometer, 9000 );
+            // BehaviorTest( turnRight, diffBot, odometer );
+            CircleMission circleMission;
+            circleMission.run();
+        }
+        else if( strcmp( argv[1], "rectangle" ) == 0 )
+        {
+            RectangleMission rectangleMission;
+            rectangleMission.run();
+        }
+        else if( strcmp( argv[1], "maze" ) == 0 )
+        {
+            MazeSolver mazeSolver;
+            mazeSolver.run();
+        }
+        else if( strcmp( argv[1], "eopd" ) == 0 )
+        {
+            eopdFilterTest();
+        }
+        else
+        {
+            std::cout << "unrecognized mission name '" << argv[1] << "'" << std::endl;
+            std::cout << "usage: " << argv[0] << " circle | maze | rectangle | eopd" << std::endl;
+        }
 
-        // BotManager botManager;
-        // botManager.run();
+    }
 
-        // DifferentialBot diffBot;
-        // Odometer odometer(diffBot);
-        // BehaviorCircleTurn turnRight( diffBot, odometer, 9000 );
-        // BehaviorTest( turnRight, diffBot, odometer );
-
-        MazeSolver mazeSolver;
-        mazeSolver.run();
-    } catch(const std::system_error& e) {
+    catch(const std::system_error& e)
+    {
         std::cout << "Caught system_error with code " << e.code() 
                   << " meaning " << e.what() << '\n';
     }
